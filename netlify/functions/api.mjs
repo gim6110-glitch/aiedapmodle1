@@ -1,5 +1,5 @@
 import { getStore } from '@netlify/blobs';
-import { createHmac, createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHmac, createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { PDFDocument } from 'pdf-lib';
 
 const LIMIT_PDF = 12 * 1024 * 1024;
@@ -18,11 +18,11 @@ const load=async(s,key)=>await s.get(key,{type:'json'});
 const put=(s,key,obj,options)=>s.setJSON(key,obj,options);
 const list=async(s,prefix)=> (await s.list({prefix})).blobs.map(x=>x.key);
 const safeText=(x,n=3000)=>String(x??'').trim().slice(0,n);
-function defaults(){return {mode:'groups',groups:Array.from({length:10},(_,i)=>({id:'g'+(i+1),label:(i+1)+'모둠',capacity:6})),updatedAt:new Date().toISOString()}}
+function defaults(){return {mode:'groups',registrationOpen:false,groups:Array.from({length:10},(_,i)=>({id:'g'+(i+1),label:(i+1)+'모둠',capacity:6})),updatedAt:new Date().toISOString()}}
 async function settings(s){return (await load(s,'settings'))||defaults()}
 async function profile(s,user){if(user?.role==='admin')return user;const p=await load(s,'people/'+user?.id);return p?{...p,role:'member'}:null;}
 const authorized=(user,p)=>user?.role==='admin'||(p?.id===user?.id)||false;
-async function visible(s,user,post){if(!post)return false;const st=await settings(s);if(user.role==='admin'||st.mode==='all')return true;const p=await profile(s,user);return p?.group===post.group;}
+async function visible(s,user,post){if(!post)return false;const st=await settings(s);if(user.role==='admin')return true;const p=await profile(s,user);return p?.group===post.group;}
 async function records(s,prefix){const keys=await list(s,prefix);return (await Promise.all(keys.map(k=>load(s,k)))).filter(Boolean)}
 async function uploadDelete(s,id,parts){for(let n=0;n<parts;n++)await s.delete('pdfparts/'+id+'/'+n);}
 async function readPDFParts(s,meta){const parts=[];for(let n=0;n<meta.parts;n++){const chunk=await s.get('pdfparts/'+meta.fileId+'/'+n,{type:'arrayBuffer'});if(!chunk)throw Error('PDF 파일 조각이 없습니다.');parts.push(new Uint8Array(chunk));}return parts;}
@@ -31,26 +31,32 @@ const respondPDF=bytes=>{let i=0;const stream=new ReadableStream({pull(controlle
 async function bodyJSON(req){try{return await req.json()}catch{return {}}}
 
 export default async function handler(req){
- if(!secret()||!process.env.AIEDAP_ADMIN_CODE||!process.env.AIEDAP_JOIN_CODE)return err('서버 초기설정이 필요합니다. Netlify 환경변수 3개를 확인해 주세요.',503);
+ if(!secret()||!process.env.AIEDAP_ADMIN_CODE)return err('Netlify에서 운영자 비밀번호와 세션 비밀키를 설정해 주세요.',503);
  const s=store(),url=new URL(req.url),op=url.searchParams.get('op')||'config';
  if(op==='config'&&req.method==='GET'){
-   const st=await settings(s);const people=await records(s,'people/');return js({mode:st.mode,groups:st.groups.map(g=>({...g,count:people.filter(p=>p.group===g.id).length})),total:people.length,ready:true});
+   const st=await settings(s);const people=await records(s,'people/');return js({mode:'groups',registrationOpen:!!st.registrationOpen,groups:st.groups.map(g=>({...g,count:people.filter(p=>p.group===g.id).length})),total:people.length,ready:true});
  }
  if(op==='login'&&req.method==='POST'){
    const b=await bodyJSON(req);
-   if(b.adminCode){if(!secureEq(b.adminCode,process.env.AIEDAP_ADMIN_CODE))return err('운영자 코드가 틀립니다.',403);return js({token:sign({role:'admin',id:'admin'}),role:'admin',name:'운영자'});}
-   if(!secureEq(b.joinCode,process.env.AIEDAP_JOIN_CODE))return err('연수 참여 코드가 맞지 않습니다.',403);
-   const name=norm(b.name),school=norm(b.school),pin=safeText(b.pin,32);
-   if(name.length<2||school.length<2||!/^\d{6,12}$/.test(pin))return err('성명·학교(각 2자 이상)와 개인 PIN(숫자 6~12자리)을 입력해 주세요.');
-   const id=hash(school.toLowerCase()+'|'+name.toLowerCase()).slice(0,32),key='people/'+id;
-   let person=await load(s,key);
-   if(person){const test=scryptSync(pin,person.salt,64).toString('hex');if(!secureEq(test,person.pinhash))return err('동일한 성명·학교의 PIN이 일치하지 않습니다.',403);}
-   else{
-     const st=await settings(s),group=st.groups.find(g=>g.id===b.group);if(!group)return err('모둠을 선택해 주세요.');
-     const people=await records(s,'people/');if(people.length>=60)return err('참가 인원이 60명에 도달했습니다. 운영자에게 문의하세요.',409);
-     if(people.filter(p=>p.group===group.id).length>=group.capacity)return err('선택한 모둠이 가득 찼습니다. 다른 모둠을 선택해 주세요.',409);
-     const salt=randomBytes(16).toString('hex');person={id,name,school,group:group.id,pinhash:scryptSync(pin,salt,64).toString('hex'),salt,joinedAt:new Date().toISOString()};
-     const outcome=await put(s,key,person,{onlyIfNew:true});if(!outcome.modified)return err('동일 계정의 동시 등록이 확인되었습니다. 다시 로그인해 주세요.',409);
+   if(b.role==='admin'||b.adminCode!==undefined){
+     if(!secureEq(b.adminCode,process.env.AIEDAP_ADMIN_CODE))return err('운영자 비밀번호를 확인해 주세요.',403);
+     return js({token:sign({role:'admin',id:'admin'}),role:'admin',user:{id:'admin',name:'운영자',school:'',group:null}});
+   }
+   const name=norm(b.name),school=norm(b.school),key=safeText(b.clientKey,160);
+   if(name.length<2||school.length<2||!/^[0-9a-fA-F-]{70,90}$/.test(key))return err('성명·학교를 입력하고 브라우저 저장 기능을 허용해 주세요.');
+   const id=hash(school.toLowerCase()+'|'+name.toLowerCase()).slice(0,32),personKey='people/'+id;
+   let person=await load(s,personKey);
+   if(person){
+     if(!person.clientHash||!secureEq(person.clientHash,hash(key)))return err('이름·학교가 이미 등록되어 있습니다. 처음 사용한 브라우저에서 접속하거나 운영자에게 문의해 주세요.',403);
+   }else{
+     const st=await settings(s);if(!st.registrationOpen)return err('아직 모둠 입장이 열리지 않았습니다. 운영자가 모둠을 준비하고 입장을 열면 접속해 주세요.',403);
+     const group=st.groups.find(g=>g.id===b.group);if(!group)return err('현장에서 안내받은 모둠을 선택해 주세요.');
+     const people=await records(s,'people/');
+     if(people.length>=60)return err('참가자가 60명에 도달했습니다. 운영자에게 문의하세요.',409);
+     if(people.filter(p=>p.group===group.id).length>=group.capacity)return err('선택한 모둠이 정원입니다. 운영자에게 확인해 주세요.',409);
+     person={id,name,school,group:group.id,clientHash:hash(key),joinedAt:new Date().toISOString()};
+     const outcome=await put(s,personKey,person,{onlyIfNew:true});
+     if(!outcome.modified)return err('같은 이름·학교로 등록 중입니다. 새로고침한 후 다시 시도해 주세요.',409);
    }
    return js({token:sign({role:'member',id}),role:'member',user:{id,name:person.name,school:person.school,group:person.group}});
  }
@@ -58,9 +64,9 @@ export default async function handler(req){
  const who=await profile(s,token);if(!who)return err('참가자 정보를 찾을 수 없습니다.',401);
  if(op==='me'&&req.method==='GET')return js({user:{id:who.id,name:who.name||'운영자',school:who.school||'',group:who.group||null},role:who.role});
  if(op==='dashboard'&&req.method==='GET'){
-    const st=await settings(s);const posts=(await records(s,'posts/')).filter(p=>who.role==='admin'||st.mode==='all'||p.group===who.group).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
+    const st=await settings(s);const posts=(await records(s,'posts/')).filter(p=>who.role==='admin'||p.group===who.group).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
     const comments=(await records(s,'comments/')).filter(c=>posts.some(p=>p.id===c.postId));
-    return js({mode:st.mode,posts:posts.map(p=>({...p,commentCount:comments.filter(c=>c.postId===p.id).length})),comments,me:{id:who.id,name:who.name||'운영자',group:who.group||null},groups:st.groups});
+    return js({mode:'groups',posts:posts.map(p=>({...p,commentCount:comments.filter(c=>c.postId===p.id).length})),comments,me:{id:who.id,name:who.name||'운영자',group:who.group||null},groups:st.groups});
  }
  if(op==='upstart'&&req.method==='POST'){
     if(who.role!=='member')return err('연수생만 제출할 수 있습니다.',403);
@@ -105,10 +111,13 @@ export default async function handler(req){
     const meta=await load(s,'uploads/'+post.uploadId);if(!meta||meta.status!=='ready')return err('PDF를 찾을 수 없습니다.',404);return respondPDF(merge(await readPDFParts(s,meta)));
  }
  if(op==='admin-settings'&&req.method==='POST'){
-    if(who.role!=='admin')return err('운영자만 가능합니다.',403);const b=await bodyJSON(req),cnt=Number(b.count),cap=Number(b.capacity),mode=b.mode;
-    if(!['groups','all'].includes(mode)||!Number.isInteger(cnt)||cnt<6||cnt>15||!Number.isInteger(cap)||cap<4||cap>10||cnt*cap<60)return err('모둠 수 6~15개, 모둠별 4~10명, 총 수용 인원 60명 이상으로 설정해 주세요.');
-    const people=await records(s,'people/'),groups=Array.from({length:cnt},(_,i)=>({id:'g'+(i+1),label:(i+1)+'모둠',capacity:cap}));if(people.some(p=>!groups.some(g=>g.id===p.group)||people.filter(x=>x.group===p.group).length>cap))return err('현재 인원이 속한 모둠을 삭제하거나 인원 이하로 축소할 수 없습니다.');
-    await put(s,'settings',{mode,groups,updatedAt:new Date().toISOString()});return js({ok:true,mode,groups});
+    if(who.role!=='admin')return err('운영자만 가능합니다.',403);
+    const b=await bodyJSON(req),cnt=Number(b.count),cap=Number(b.capacity),registrationOpen=b.registrationOpen===true;
+    if(!Number.isInteger(cnt)||cnt<6||cnt>15||!Number.isInteger(cap)||cap<4||cap>10||cnt*cap<60)return err('모둠 수 6~15개, 모둠별 정원 4~10명, 총 수용 60명 이상으로 설정해 주세요.');
+    const people=await records(s,'people/'),groups=Array.from({length:cnt},(_,i)=>({id:'g'+(i+1),label:(i+1)+'모둠',capacity:cap}));
+    if(people.some(p=>!groups.some(g=>g.id===p.group)||people.filter(x=>x.group===p.group).length>cap))return err('기존 참여자가 속한 모둠을 삭제하거나 정원 미만으로 줄일 수 없습니다.');
+    await put(s,'settings',{mode:'groups',registrationOpen,groups,updatedAt:new Date().toISOString()});
+    return js({ok:true,mode:'groups',registrationOpen,groups});
  }
  if(op==='admin-transfer'&&req.method==='POST'){
     if(who.role!=='admin')return err('운영자만 가능합니다.',403);const b=await bodyJSON(req),person=await load(s,'people/'+b.id),st=await settings(s),g=st.groups.find(x=>x.id===b.group);if(!person||!g)return err('참가자나 모둠을 찾을 수 없습니다.');const people=await records(s,'people/');if(people.filter(x=>x.group===g.id).length>=g.capacity)return err('해당 모둠은 정원입니다.');person.group=g.id;await put(s,'people/'+person.id,person);const post=await load(s,'posts/'+person.id);if(post){post.group=g.id;await put(s,'posts/'+person.id,post);}return js({ok:true});
