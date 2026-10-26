@@ -24,7 +24,17 @@ function setView(name){state.view=name;document.querySelectorAll('.top-tabs [dat
 function storageKey(){return 'aiedap-m1-local-'+(state.user?.id||'admin')}
 function saveLocal(){if(!state.user)return;try{localStorage.setItem(storageKey(),JSON.stringify({values:state.values,slide:state.slide,date:new Date().toISOString()}));$('save-state').textContent='자동저장 ✓ '+new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}catch{$('save-state').textContent='저장 실패 · JSON 백업 권장';}}
 function restoreLocal(){try{const raw=localStorage.getItem(storageKey());if(raw){const v=JSON.parse(raw);state.values=v.values&&typeof v.values==='object'?v.values:{};state.slide=Math.max(1,Math.min(19,Number(v.slide)||1));}}catch{toast('기존 브라우저 저장 내용을 읽을 수 없습니다.',true)}}
-async function initConfig(){try{state.config=await api('config',undefined,'GET');$('u-group').innerHTML='<option value="">모둠을 선택하세요</option>'+state.config.groups.map(g=>`<option value="${escape(g.id)}">${escape(g.label)} · ${g.count}/${g.capacity}명</option>`).join('');}catch(e){$('u-group').innerHTML='<option value="">서버 연결 확인 필요</option>';toast(errorText(e),true)}}
+async function initConfig(){
+ try{
+  state.config=await api('config',undefined,'GET');
+  $('u-group').innerHTML='<option value="">모둠을 선택하세요</option>'+state.config.groups.map(g=>'<option value="'+escape(g.id)+'" '+(g.count>=g.capacity?'disabled':'')+'>'+escape(g.label)+' · '+g.count+'/'+g.capacity+'명'+(g.count>=g.capacity?' (마감)':'')+'</option>').join('');
+  $('registration-state').textContent=state.config.registrationOpen?'연수생 입장 중 · 현장에서 안내받은 모둠을 선택하세요.':'아직 신규 입장 전입니다. 운영자가 모둠을 열면 참여할 수 있습니다.';
+ }catch(e){
+  $('u-group').innerHTML='<option value="">서버 연결 확인 필요</option>';
+  $('registration-state').textContent='연결 오류 · 운영자에게 문의하세요.';
+  toast(errorText(e),true);
+ }
+}
 function browserCredential(name,school){const id='aiedap-m1-browserkey-'+school.toLowerCase().trim()+'|'+name.toLowerCase().trim();let key=localStorage.getItem(id);if(!key){key=crypto.randomUUID()+crypto.randomUUID();localStorage.setItem(id,key);}return key;}
 async function login(e){e.preventDefault();const adminMode=new URLSearchParams(location.search).has('admin');const button=$('login-submit');button.disabled=true;try{
  let result;if(adminMode)result=await api('login',{role:'admin',adminCode:$('u-admin-code').value});else{const name=$('u-name').value.trim(),school=$('u-school').value.trim();result=await api('login',{name,school,group:$('u-group').value,clientKey:browserCredential(name,school)});}
