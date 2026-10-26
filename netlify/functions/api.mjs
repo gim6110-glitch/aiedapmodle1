@@ -1,5 +1,5 @@
 import { getStore } from '@netlify/blobs';
-import { createHmac, createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHmac, createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { PDFDocument } from 'pdf-lib';
 
 const LIMIT_PDF = 12 * 1024 * 1024;
@@ -10,9 +10,29 @@ const err=(msg,status=400)=>js({error:msg},status);
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const norm=s=>String(s??'').trim().replace(/\s+/g,' ').slice(0,80);
 const secureEq=(a,b)=>{const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length && timingSafeEqual(x,y)};
-const secret=()=>process.env.AIEDAP_SESSION_SECRET;
-const sign=p=>{const d=Buffer.from(JSON.stringify({...p,exp:Date.now()+14*86400e3})).toString('base64url');const h=createHmac('sha256',secret()).update(d).digest('base64url');return d+'.'+h};
-function session(req){const token=req.headers.get('authorization')?.replace(/^Bearer\s+/i,'');if(!token)return null;try{const [d,s]=token.split('.');if(!d||!s)return null;const h=createHmac('sha256',secret()).update(d).digest('base64url');if(!secureEq(h,s))return null;const p=JSON.parse(Buffer.from(d,'base64url'));return p.exp>Date.now()?p:null;}catch{return null;}}
+// Initial bootstrap password is intentionally temporary; force an immediate change.
+const INITIAL_ADMIN_PASSWORD='9876';
+const adminInfo=async s=>await load(s,'auth/admin-password');
+const verifyAdmin=(password,record)=>{
+  if(!record)return secureEq(password,INITIAL_ADMIN_PASSWORD);
+  if(typeof password!=='string'||password.length>256)return false;
+  const derived=scryptSync(password,record.salt,64).toString('hex');
+  return secureEq(derived,record.passwordHash);
+};
+async function sessionKey(s){
+  const configured=process.env.AIEDAP_SESSION_SECRET;
+  if(configured)return configured;
+  let existing=await load(s,'auth/session-key');
+  if(existing?.key)return existing.key;
+  const fresh={key:randomBytes(32).toString('base64url')};
+  await put(s,'auth/session-key',fresh,{onlyIfNew:true});
+  existing=await load(s,'auth/session-key');
+  if(!existing?.key)throw Error('로그인 키를 생성하지 못했습니다.');
+  return existing.key;
+}
+const sign=(p,key)=>{const d=Buffer.from(JSON.stringify({...p,exp:Date.now()+14*86400e3})).toString('base64url');const h=createHmac('sha256',key).update(d).digest('base64url');return d+'.'+h};
+function session(req,key){const token=req.headers.get('authorization')?.replace(/^Bearer\s+/i,'');if(!token)return null;try{const [d,s]=token.split('.');if(!d||!s)return null;const h=createHmac('sha256',key).update(d).digest('base64url');if(!secureEq(h,s))return null;const p=JSON.parse(Buffer.from(d,'base64url'));return p.exp>Date.now()?p:null;}catch{return null;}}
+
 const store=()=>getStore({name:'aiedap-m1-'+(process.env.CONTEXT==='production'?'production':('sandbox-'+(process.env.DEPLOY_ID||'local').slice(0,12))),consistency:'strong'});
 const load=async(s,key)=>await s.get(key,{type:'json'});
 const put=(s,key,obj,options)=>s.setJSON(key,obj,options);
@@ -31,16 +51,17 @@ const respondPDF=bytes=>{let i=0;const stream=new ReadableStream({pull(controlle
 async function bodyJSON(req){try{return await req.json()}catch{return {}}}
 
 export default async function handler(req){
- if(!secret()||!process.env.AIEDAP_ADMIN_CODE)return err('Netlify에서 운영자 비밀번호와 세션 비밀키를 설정해 주세요.',503);
  const s=store(),url=new URL(req.url),op=url.searchParams.get('op')||'config';
+ let key;try{key=await sessionKey(s);}catch(e){return err('서버 로그인 저장소 연결을 확인해 주세요: '+e.message,503);}
  if(op==='config'&&req.method==='GET'){
    const st=await settings(s);const people=await records(s,'people/');return js({mode:'groups',registrationOpen:!!st.registrationOpen,groups:st.groups.map(g=>({...g,count:people.filter(p=>p.group===g.id).length})),total:people.length,ready:true});
  }
  if(op==='login'&&req.method==='POST'){
    const b=await bodyJSON(req);
    if(b.role==='admin'||b.adminCode!==undefined){
-     if(!secureEq(b.adminCode,process.env.AIEDAP_ADMIN_CODE))return err('운영자 비밀번호를 확인해 주세요.',403);
-     return js({token:sign({role:'admin',id:'admin'}),role:'admin',user:{id:'admin',name:'운영자',school:'',group:null}});
+     const stored=await adminInfo(s);
+     if(!verifyAdmin(b.adminCode,stored))return err('운영자 비밀번호를 확인해 주세요.',403);
+     return js({token:sign({role:'admin',id:'admin',adminVersion:stored?.version||'initial'},key),role:'admin',mustChangePassword:!stored,user:{id:'admin',name:'운영자',school:'',group:null}});
    }
    const name=norm(b.name),school=norm(b.school),key=safeText(b.clientKey,160);
    if(name.length<2||school.length<2||!/^[0-9a-fA-F-]{70,90}$/.test(key))return err('성명·학교를 입력하고 브라우저 저장 기능을 허용해 주세요.');
@@ -58,11 +79,30 @@ export default async function handler(req){
      const outcome=await put(s,personKey,person,{onlyIfNew:true});
      if(!outcome.modified)return err('같은 이름·학교로 등록 중입니다. 새로고침한 후 다시 시도해 주세요.',409);
    }
-   return js({token:sign({role:'member',id}),role:'member',user:{id,name:person.name,school:person.school,group:person.group}});
+   return js({token:sign({role:'member',id},key),role:'member',user:{id,name:person.name,school:person.school,group:person.group}});
  }
- const token=session(req);if(!token)return err('로그인이 필요하거나 로그인 유효기간이 지났습니다.',401);
+ const token=session(req,key);if(!token)return err('로그인이 필요하거나 로그인 유효기간이 지났습니다.',401);
  const who=await profile(s,token);if(!who)return err('참가자 정보를 찾을 수 없습니다.',401);
- if(op==='me'&&req.method==='GET')return js({user:{id:who.id,name:who.name||'운영자',school:who.school||'',group:who.group||null},role:who.role});
+ const adminRecord=who.role==='admin'?await adminInfo(s):null;
+ if(who.role==='admin'&&token.adminVersion!==(adminRecord?.version||'initial'))return err('관리자 비밀번호가 변경되었습니다. 다시 로그인해 주세요.',401);
+ if(op==='me'&&req.method==='GET')return js({user:{id:who.id,name:who.name||'운영자',school:who.school||'',group:who.group||null},role:who.role,mustChangePassword:who.role==='admin'&&!adminRecord});
+ if(who.role==='admin'&&!adminRecord&&op!=='admin-password')return err('최초 로그인입니다. 먼저 초기 비밀번호를 변경해 주세요.',403);
+ if(op==='admin-password'&&req.method==='POST'){
+   if(who.role!=='admin')return err('운영자만 비밀번호를 변경할 수 있습니다.',403);
+   const b=await bodyJSON(req),current=safeText(b.currentPassword,300),next=String(b.newPassword||'');
+   if(!verifyAdmin(current,adminRecord))return err('현재 비밀번호가 일치하지 않습니다.',403);
+   if(next.length<8||next.length>100||next===INITIAL_ADMIN_PASSWORD||next===current)return err('새 비밀번호는 8~100자이며, 초기 비밀번호나 기존 비밀번호와 달라야 합니다.');
+   const salt=randomBytes(16).toString('hex'),record={salt,passwordHash:scryptSync(next,salt,64).toString('hex'),version:randomUUID(),changedAt:new Date().toISOString()};
+   if(!adminRecord){
+     const written=await put(s,'auth/admin-password',record,{onlyIfNew:true});
+     if(!written.modified)return err('이미 관리자 비밀번호가 설정됐습니다. 다시 로그인해 주세요.',409);
+   }else{
+     const currentAgain=await adminInfo(s);
+     if(currentAgain?.version!==adminRecord.version)return err('다른 곳에서 비밀번호가 변경되었습니다. 다시 로그인해 주세요.',409);
+     await put(s,'auth/admin-password',record);
+   }
+   return js({ok:true,token:sign({role:'admin',id:'admin',adminVersion:record.version},key)});
+ }
  if(op==='dashboard'&&req.method==='GET'){
     const st=await settings(s);const posts=(await records(s,'posts/')).filter(p=>who.role==='admin'||p.group===who.group).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
     const comments=(await records(s,'comments/')).filter(c=>posts.some(p=>p.id===c.postId));
