@@ -27,7 +27,7 @@ async function records(s,prefix){const keys=await list(s,prefix);return (await P
 async function uploadDelete(s,id,parts){for(let n=0;n<parts;n++)await s.delete('pdfparts/'+id+'/'+n);}
 async function readPDFParts(s,meta){const parts=[];for(let n=0;n<meta.parts;n++){const chunk=await s.get('pdfparts/'+meta.fileId+'/'+n,{type:'arrayBuffer'});if(!chunk)throw Error('PDF 파일 조각이 없습니다.');parts.push(new Uint8Array(chunk));}return parts;}
 function merge(parts){const out=new Uint8Array(parts.reduce((v,a)=>v+a.length,0));let offset=0;for(const v of parts){out.set(v,offset);offset+=v.length;}return out;}
-const respondPDF=bytes=>new Response(bytes,{headers:{'content-type':'application/pdf','content-disposition':'inline; filename="lesson.pdf"','cache-control':'private, max-age=120','x-content-type-options':'nosniff'}});
+const respondPDF=bytes=>{let i=0;const stream=new ReadableStream({pull(controller){if(i>=bytes.length){controller.close();return;}controller.enqueue(bytes.subarray(i,Math.min(i+65536,bytes.length)));i+=65536;}});return new Response(stream,{headers:{'content-type':'application/pdf','content-disposition':'inline; filename="lesson.pdf"','cache-control':'private, max-age=120','x-content-type-options':'nosniff'}})};
 async function bodyJSON(req){try{return await req.json()}catch{return {}}}
 
 export default async function handler(req){
