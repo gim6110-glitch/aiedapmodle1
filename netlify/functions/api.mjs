@@ -63,19 +63,19 @@ export default async function handler(req){
      if(!verifyAdmin(b.adminCode,stored))return err('운영자 비밀번호를 확인해 주세요.',403);
      return js({token:sign({role:'admin',id:'admin',adminVersion:stored?.version||'initial'},key),role:'admin',mustChangePassword:!stored,user:{id:'admin',name:'운영자',school:'',group:null}});
    }
-   const name=norm(b.name),school=norm(b.school),key=safeText(b.clientKey,160);
-   if(name.length<2||school.length<2||!/^[0-9a-fA-F-]{70,90}$/.test(key))return err('성명·학교를 입력하고 브라우저 저장 기능을 허용해 주세요.');
+   const name=norm(b.name),school=norm(b.school),clientKey=safeText(b.clientKey,160);
+   if(name.length<2||school.length<2||!/^[0-9a-fA-F-]{70,90}$/.test(clientKey))return err('성명·학교를 입력하고 브라우저 저장 기능을 허용해 주세요.');
    const id=hash(school.toLowerCase()+'|'+name.toLowerCase()).slice(0,32),personKey='people/'+id;
    let person=await load(s,personKey);
    if(person){
-     if(!person.clientHash||!secureEq(person.clientHash,hash(key)))return err('이름·학교가 이미 등록되어 있습니다. 처음 사용한 브라우저에서 접속하거나 운영자에게 문의해 주세요.',403);
+     if(!person.clientHash||!secureEq(person.clientHash,hash(clientKey)))return err('이름·학교가 이미 등록되어 있습니다. 처음 사용한 브라우저에서 접속하거나 운영자에게 문의해 주세요.',403);
    }else{
      const st=await settings(s);if(!st.registrationOpen)return err('아직 모둠 입장이 열리지 않았습니다. 운영자가 모둠을 준비하고 입장을 열면 접속해 주세요.',403);
      const group=st.groups.find(g=>g.id===b.group);if(!group)return err('현장에서 안내받은 모둠을 선택해 주세요.');
      const people=await records(s,'people/');
      if(people.length>=60)return err('참가자가 60명에 도달했습니다. 운영자에게 문의하세요.',409);
      if(people.filter(p=>p.group===group.id).length>=group.capacity)return err('선택한 모둠이 정원입니다. 운영자에게 확인해 주세요.',409);
-     person={id,name,school,group:group.id,clientHash:hash(key),joinedAt:new Date().toISOString()};
+     person={id,name,school,group:group.id,clientHash:hash(clientKey),joinedAt:new Date().toISOString()};
      const outcome=await put(s,personKey,person,{onlyIfNew:true});
      if(!outcome.modified)return err('같은 이름·학교로 등록 중입니다. 새로고침한 후 다시 시도해 주세요.',409);
    }
