@@ -18,6 +18,8 @@ jobs:
           node --check src/main.js
           node --check netlify/functions/api.mjs
           node --check src/hwpx.js
+      - name: Verify administrator password lifecycle
+        run: node --test tests/admin-auth.test.mjs
       - name: Production build
         run: npm run build
       - name: Assert published entrypoints exist
