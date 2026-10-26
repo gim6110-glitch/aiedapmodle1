@@ -11,7 +11,7 @@ const sectionGroups=[{title:'사례 공유 및 자료 준비',first:1,last:7},{t
 const labels={title:'수업명',course:'학년·교과',steps:'핵심 수업 활동(3~5단계)',strong:'잘되었던 활동 또는 인상적인 장면',dilemma:'함께 고민하고 싶은 점',problem:'문제 상황',causes:'원인 파악(학생·과제·AI·운영)',question:'동료에게 논의하고 싶은 질문',good:'잘된 점(피드백 후)',improve:'개선할 점(피드백 후)',plan1:'실천 방향 1',plan2:'실천 방향 2',plan3:'실천 방향 3'};
 const requiredKeys=Object.keys(labels);
 const kinds={learn:'① 배우고 싶은 점',ask:'② 더 알고 싶은 점',apply:'③ 적용 아이디어'};
-const state={user:null,token:null,role:null,slide:1,values:{},slides:[],posts:[],comments:[],groups:[],mode:'groups',view:'lecture',selected:null,pdf:null,pdfBusy:false,deckReady:false,deckFile:null,slideImages:[],config:null,adminGroupFilter:'',toastTime:0};
+const state={user:null,token:null,role:null,slide:1,values:{},slides:[],posts:[],comments:[],groups:[],mode:'groups',view:'lecture',selected:null,pdf:null,pdfBusy:false,deckReady:false,deckFile:null,slideImages:[],config:null,adminGroupFilter:'',adminMustChange:false,toastTime:0};
 const apiUrl=op=>'/api?op='+encodeURIComponent(op);
 function toast(msg,error=false){const el=$('notice');el.textContent=msg;el.className='notice'+(error?' error':' success');el.hidden=false;clearTimeout(state.toastTime);state.toastTime=setTimeout(()=>el.hidden=true,4800)}
 function errorText(e){return e?.message||String(e)}
@@ -20,7 +20,7 @@ async function api(op,body,method='POST'){
  let options={method,headers};if(body!==undefined){headers['Content-Type']='application/json';options.body=JSON.stringify(body)}
  const response=await fetch(apiUrl(op),options);let result;try{result=await response.json()}catch{throw Error('서버 응답을 읽을 수 없습니다. 잠시 후 다시 시도하세요.')}if(!response.ok)throw Error(result.error||'서버 요청 실패 ('+response.status+')');return result;
 }
-function setView(name){state.view=name;document.querySelectorAll('.top-tabs [data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));document.querySelectorAll('#workspace>.page').forEach(el=>el.classList.toggle('active',el.id==='screen-'+name));if(name==='gallery')refreshGallery();if(name==='result')renderResult();if(name==='admin'&&state.role==='admin')refreshAdmin();}
+function setView(name){if(state.role==='admin'&&state.adminMustChange)name='admin';state.view=name;document.querySelectorAll('.top-tabs [data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));document.querySelectorAll('#workspace>.page').forEach(el=>el.classList.toggle('active',el.id==='screen-'+name));if(name==='gallery')refreshGallery();if(name==='result')renderResult();if(name==='admin'&&state.role==='admin'){renderAdminPasswordState();if(!state.adminMustChange)refreshAdmin();}}
 function storageKey(){return 'aiedap-m1-local-'+(state.user?.id||'admin')}
 function saveLocal(){if(!state.user)return;try{localStorage.setItem(storageKey(),JSON.stringify({values:state.values,slide:state.slide,date:new Date().toISOString()}));$('save-state').textContent='자동저장 ✓ '+new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}catch{$('save-state').textContent='저장 실패 · JSON 백업 권장';}}
 function restoreLocal(){try{const raw=localStorage.getItem(storageKey());if(raw){const v=JSON.parse(raw);state.values=v.values&&typeof v.values==='object'?v.values:{};state.slide=Math.max(1,Math.min(19,Number(v.slide)||1));}}catch{toast('기존 브라우저 저장 내용을 읽을 수 없습니다.',true)}}
@@ -38,10 +38,10 @@ async function initConfig(){
 function browserCredential(name,school){const id='aiedap-m1-browserkey-'+school.toLowerCase().trim()+'|'+name.toLowerCase().trim();let key=localStorage.getItem(id);if(!key){key=crypto.randomUUID()+crypto.randomUUID();localStorage.setItem(id,key);}return key;}
 async function login(e){e.preventDefault();const adminMode=new URLSearchParams(location.search).has('admin');const button=$('login-submit');button.disabled=true;try{
  let result;if(adminMode)result=await api('login',{role:'admin',adminCode:$('u-admin-code').value});else{const name=$('u-name').value.trim(),school=$('u-school').value.trim();result=await api('login',{name,school,group:$('u-group').value,clientKey:browserCredential(name,school)});}
- state.token=result.token;state.role=result.role;state.user=result.user||{id:'admin',name:'운영자'};(adminMode?sessionStorage:localStorage).setItem('aiedap-m1-session',JSON.stringify({token:state.token,user:state.user,role:state.role}));restoreLocal();$('login-screen').hidden=true;$('workspace').hidden=false;$('identity').textContent=(state.user.name||'운영자')+(state.user.school?' · '+state.user.school:'')+(state.user.group?' · '+state.user.group.toUpperCase():'');$('admin-tab').hidden=state.role!=='admin';
+ state.token=result.token;state.role=result.role;state.adminMustChange=!!result.mustChangePassword;state.user=result.user||{id:'admin',name:'운영자'};(adminMode?sessionStorage:localStorage).setItem('aiedap-m1-session',JSON.stringify({token:state.token,user:state.user,role:state.role}));restoreLocal();$('login-screen').hidden=true;$('workspace').hidden=false;$('identity').textContent=(state.user.name||'운영자')+(state.user.school?' · '+state.user.school:'')+(state.user.group?' · '+state.user.group.toUpperCase():'');$('admin-tab').hidden=state.role!=='admin';
  await startDeck();renderMenu();goSlide(state.slide);setView(state.role==='admin'?'admin':'lecture');toast(state.role==='admin'?'운영자 화면으로 이동했습니다.':'활동을 이어서 시작합니다.');
  }catch(e){toast(errorText(e),true)}finally{button.disabled=false}}
-async function checkSession(){const storage=new URLSearchParams(location.search).has('admin')?sessionStorage:localStorage;const cached=storage.getItem('aiedap-m1-session');if(!cached)return;try{const v=JSON.parse(cached);state.token=v.token;const r=await api('me',undefined,'GET');state.user=r.user;state.role=r.role;restoreLocal();$('login-screen').hidden=true;$('workspace').hidden=false;$('identity').textContent=r.user.name+' · '+(r.user.school||r.user.group||'');$('admin-tab').hidden=r.role!=='admin';await startDeck();renderMenu();goSlide(state.slide);setView(state.role==='admin'?'admin':'lecture');}catch{storage.removeItem('aiedap-m1-session');state.token=null}}
+async function checkSession(){const storage=new URLSearchParams(location.search).has('admin')?sessionStorage:localStorage;const cached=storage.getItem('aiedap-m1-session');if(!cached)return;try{const v=JSON.parse(cached);state.token=v.token;const r=await api('me',undefined,'GET');state.user=r.user;state.role=r.role;state.adminMustChange=!!r.mustChangePassword;restoreLocal();$('login-screen').hidden=true;$('workspace').hidden=false;$('identity').textContent=r.user.name+' · '+(r.user.school||r.user.group||'');$('admin-tab').hidden=r.role!=='admin';await startDeck();renderMenu();goSlide(state.slide);setView(state.role==='admin'?'admin':'lecture');}catch{storage.removeItem('aiedap-m1-session');state.token=null}}
 async function startDeck(){
  if(state.slides.length===0){try{state.slides=await (await fetch('/slides.json')).json()}catch{state.slides=Array.from({length:19},(_,i)=>({n:i+1,title:'슬라이드 '+(i+1),content:'교안을 불러올 수 없습니다.'}))}}
  try{if(!state.slideImages.length){const images=await fetch('/slides-images.json');if(images.ok)state.slideImages=await images.json()}let response=await fetch('/deck.pdf');if(!response.ok||!response.headers.get('content-type')?.includes('pdf'))response=await fetch(apiUrl('deck'),{headers:{Authorization:'Bearer '+state.token}});if(!response.ok)throw Error('운영자의 원본 교안 등록을 기다리는 중');let data=await response.arrayBuffer();state.pdf=await pdfjs.getDocument({data}).promise;state.deckReady=state.pdf.numPages===19;}catch(e){state.pdf=null;state.deckReady=false;}renderMenu();
@@ -120,7 +120,36 @@ async function exportHwpx(){try{download(await createHwpx(resultSections()),'모
 function exportJSON(){download(new Blob([JSON.stringify({schema:'aiedap-module1-v1',user:{id:state.user.id,name:state.user.name,school:state.user.school,group:state.user.group},values:state.values,slide:state.slide,createdAt:new Date().toISOString()},null,2)],{type:'application/json'}),'모듈1_백업_'+safeFilename(state.user.name)+'.json')}
 async function importJSON(ev){const file=ev.target.files?.[0];if(!file)return;try{const b=JSON.parse(await file.text());if(b.schema!=='aiedap-module1-v1'||!b.values||typeof b.values!=='object')throw Error('모듈1 백업 파일이 아닙니다.');if(b.user?.id!==state.user.id&&!confirm('다른 이름/학교에서 만든 파일입니다. 현재 계정의 내용을 덮어쓸까요?'))return;state.values=Object.fromEntries(Object.keys(labels).map(k=>[k,safeTextClient(b.values[k])]));state.slide=Math.max(1,Math.min(19,Number(b.slide)||1));saveLocal();goSlide(state.slide);renderResult();toast('JSON 활동 기록을 불러왔습니다.');}catch(e){toast(errorText(e),true)}finally{ev.target.value=''}}
 function safeTextClient(s){return String(s??'').slice(0,7000)}
-async function refreshAdmin(){if(state.role!=='admin')return;try{const [c,u,d]=await Promise.all([api('config',undefined,'GET'),api('admin-users',undefined,'GET'),api('deck-info',undefined,'GET')]);state.config=c;state.adminUsers=u.users;$('registration-open').checked=!!c.registrationOpen;$('group-count').value=c.groups.length;$('group-capacity').value=c.groups[0]?.capacity||6;$('deck-state').textContent=d.exists?'원본 19장 교안 PDF가 등록되어 있습니다.':'교안 PDF 미등록 — PDF 등록 전에는 원본 슬라이드 텍스트가 표시됩니다.';$('admin-groups').innerHTML=c.groups.map(g=>{const members=u.users.filter(x=>x.group===g.id),submitted=members.filter(x=>x.submitted).length,feedback=members.reduce((sum,x)=>sum+x.feedback,0);return `<button type="button" class="group-summary" data-open-group="${g.id}"><strong>${escape(g.label)}</strong><span>${members.length}/${g.capacity}명 · PDF ${submitted}건</span><small>작성한 댓글 ${feedback}개 · 갤러리 보기 →</small></button>`}).join('');
+function renderAdminPasswordState(){
+ if(state.role!=='admin')return;
+ $('admin-operations').hidden=!!state.adminMustChange;
+ $('admin-password-notice').textContent=state.adminMustChange
+  ?'최초 로그인입니다. 초기 비밀번호 9876은 공개된 임시 비밀번호입니다. 모둠 운영을 시작하기 전에 새로운 비밀번호(8자 이상)로 변경해 주세요.'
+  :'현재 비밀번호를 입력하면 이 화면에서 언제든 관리자 비밀번호를 변경할 수 있습니다. 변경하면 다른 관리자 로그인 세션은 만료됩니다.';
+}
+async function changeAdminPassword(e){
+ e.preventDefault();
+ if(state.role!=='admin')return;
+ const current=$('admin-current-password').value;
+ const next=$('admin-new-password').value;
+ const confirmation=$('admin-confirm-password').value;
+ if(next!==confirmation)return toast('새 비밀번호 두 곳의 입력값이 서로 다릅니다.',true);
+ if(next.length<8)return toast('새 비밀번호는 8자 이상으로 설정해 주세요.',true);
+ const button=$('admin-password-form').querySelector('[type="submit"]');
+ button.disabled=true;
+ try{
+  const result=await api('admin-password',{currentPassword:current,newPassword:next});
+  state.token=result.token;
+  state.adminMustChange=false;
+  sessionStorage.setItem('aiedap-m1-session',JSON.stringify({token:state.token,user:state.user,role:state.role}));
+  $('admin-password-form').reset();
+  renderAdminPasswordState();
+  toast('관리자 비밀번호를 변경했습니다. 앞으로 새 비밀번호로 로그인하세요.');
+  await refreshAdmin();
+ }catch(err){toast(errorText(err),true)}
+ finally{button.disabled=false}
+}
+async function refreshAdmin(){if(state.role!=='admin'||state.adminMustChange)return;try{const [c,u,d]=await Promise.all([api('config',undefined,'GET'),api('admin-users',undefined,'GET'),api('deck-info',undefined,'GET')]);state.config=c;state.adminUsers=u.users;$('registration-open').checked=!!c.registrationOpen;$('group-count').value=c.groups.length;$('group-capacity').value=c.groups[0]?.capacity||6;$('deck-state').textContent=d.exists?'원본 19장 교안 PDF가 등록되어 있습니다.':'교안 PDF 미등록 — PDF 등록 전에는 원본 슬라이드 텍스트가 표시됩니다.';$('admin-groups').innerHTML=c.groups.map(g=>{const members=u.users.filter(x=>x.group===g.id),submitted=members.filter(x=>x.submitted).length,feedback=members.reduce((sum,x)=>sum+x.feedback,0);return `<button type="button" class="group-summary" data-open-group="${g.id}"><strong>${escape(g.label)}</strong><span>${members.length}/${g.capacity}명 · PDF ${submitted}건</span><small>작성한 댓글 ${feedback}개 · 갤러리 보기 →</small></button>`}).join('');
  $('admin-groups').querySelectorAll('[data-open-group]').forEach(b=>b.addEventListener('click',()=>{state.adminGroupFilter=b.dataset.openGroup;setView('gallery')}));
  $('admin-users').innerHTML=`<p><strong>참가자 ${u.total} / 60명</strong> · PDF 등록 ${u.users.filter(x=>x.submitted).length}명 · 남긴 댓글 총 ${u.users.reduce((a,x)=>a+x.feedback,0)}개</p><div class="progress-shell"><div class="progress" style="width:${Math.round(u.total/60*100)}%"></div></div><div style="overflow:auto"><table class="admin-table"><thead><tr><th>성명</th><th>소속</th><th>모둠 이동</th><th>PDF</th><th>댓글</th></tr></thead><tbody>${u.users.map(x=>`<tr><td>${escape(x.name)}</td><td>${escape(x.school)}</td><td><select data-move-user="${x.id}">${c.groups.map(g=>`<option value="${g.id}" ${g.id===x.group?'selected':''}>${escape(g.label)}</option>`).join('')}</select></td><td>${x.submitted?'✅':'—'}</td><td>${x.feedback}</td></tr>`).join('')}</tbody></table></div>`;
  document.querySelectorAll('[data-move-user]').forEach(el=>el.addEventListener('change',async()=>{if(!confirm('모둠을 이동하면 해당 참가자의 PDF와 댓글 접근 범위도 변경됩니다. 계속할까요?'))return refreshAdmin();try{await api('admin-transfer',{id:el.dataset.moveUser,group:el.value});toast('참가자 모둠을 변경했습니다.');await refreshAdmin()}catch(e){toast(errorText(e),true);refreshAdmin()}}));}catch(e){toast(errorText(e),true)}}
@@ -138,7 +167,7 @@ function attach(){
  $('login-submit').textContent=adminMode?'운영자 로그인 →':'내 모둠으로 입장하기 →';
  $('logout').addEventListener('click',()=>{(new URLSearchParams(location.search).has('admin')?sessionStorage:localStorage).removeItem('aiedap-m1-session');location.reload()});document.querySelectorAll('.top-tabs [data-view]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
  $('slide-prev').addEventListener('click',()=>goSlide(state.slide-1));$('slide-next').addEventListener('click',()=>goSlide(state.slide+1));$('full-screen').addEventListener('click',()=>{const el=$('slide-box');if(document.fullscreenElement)document.exitFullscreen();else el.requestFullscreen?.()});
- $('gallery-refresh').addEventListener('click',refreshGallery);$('export-preview').addEventListener('click',preview);$('export-json').addEventListener('click',exportJSON);$('export-docx').addEventListener('click',exportDocx);$('export-hwpx').addEventListener('click',exportHwpx);$('import-json').addEventListener('change',importJSON);$('group-form').addEventListener('submit',saveSettings);$('deck-submit').addEventListener('click',uploadDeck);$('admin-refresh').addEventListener('click',refreshAdmin);$('admin-csv').addEventListener('click',exportAdminCSV);
+ $('gallery-refresh').addEventListener('click',refreshGallery);$('export-preview').addEventListener('click',preview);$('export-json').addEventListener('click',exportJSON);$('export-docx').addEventListener('click',exportDocx);$('export-hwpx').addEventListener('click',exportHwpx);$('import-json').addEventListener('change',importJSON);$('group-form').addEventListener('submit',saveSettings);$('admin-password-form').addEventListener('submit',changeAdminPassword);$('deck-submit').addEventListener('click',uploadDeck);$('admin-refresh').addEventListener('click',refreshAdmin);$('admin-csv').addEventListener('click',exportAdminCSV);
  setInterval(()=>{if(state.view==='gallery'&&document.visibilityState==='visible'&&state.token)refreshGallery()},30000);
 }
 attach();initConfig();checkSession();
