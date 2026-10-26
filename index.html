@@ -4,21 +4,19 @@
 <section id="login-screen" class="auth-shell"><article class="auth-card">
  <header class="auth-hero"><p>AIEDAP · MODULE 01</p><h1>AI 융합수업 실천 사례 공유</h1><p>교실 혁신을 말하다 · 교안 19장 · 모둠별 갤러리워크</p></header>
  <div class="auth-body"><p>강의 교안을 보면서 사례를 공유하고, 모둠 교사의 사례에 댓글을 남길 수 있습니다. 작성 내용은 이 브라우저에 자동저장됩니다.</p>
- <div class="seg"><button type="button" class="active" id="mode-member">연수생 입장</button><button type="button" id="mode-admin">운영자 설정</button></div>
+ <p id="member-heading" class="eyebrow">연수생 입장 · 이름과 모둠만 선택하면 됩니다</p>
  <form id="login-form" class="form-stack">
  <div id="member-login">
  <label>성명<input id="u-name" autocomplete="name" maxlength="40" required placeholder="성명을 입력하세요"/></label>
  <label>소속 학교<input id="u-school" maxlength="80" required placeholder="학교명"/></label>
  <label>나의 모둠<select id="u-group" required><option value="">모둠 목록을 불러오는 중…</option></select></label>
- <label>개인 PIN (숫자 6~12자리)<input id="u-pin" type="password" inputmode="numeric" minlength="6" maxlength="12" pattern="[0-9]{6,12}" required placeholder="첫 접속 시 직접 정하고 다음에도 동일하게 입력"/></label>
- <label>연수 참여 코드<input id="u-join" type="password" required placeholder="운영자가 안내한 참여 코드"/></label>
- <p class="hint">개인 PIN과 참여 코드는 다른 기기에서 이어서 작성하고 무단 접근을 방지하기 위해 사용합니다. 이름·학교만으로 로그인하지 않습니다.</p>
+ <p class="hint">참여 코드·PIN은 필요 없습니다. 선택한 모둠의 PDF와 댓글이 보이며, 같은 브라우저에서 작성 내용이 이어집니다.</p>
  </div>
- <div id="admin-login" hidden><label>운영자 전용 코드<input id="u-admin-code" type="password" placeholder="Netlify에 설정한 운영자 코드"/></label></div>
- <button class="primary large" type="submit" id="login-submit">저장된 활동 이어서 시작 →</button>
+ <div id="admin-login" hidden><p class="eyebrow">운영자 전용 로그인</p><p>모든 모둠 갤러리 열람 · 모둠 편성 · 참가자 이동</p><label>관리자 비밀번호<input id="u-admin-code" type="password" autocomplete="current-password" placeholder="운영자 비밀번호"/></label><p><a href="/" class="simple-link">← 연수생 입장으로 돌아가기</a></p></div>
+ <button class="primary large" type="submit" id="login-submit">내 모둠으로 입장하기 →</button>
  </form>
- <div class="warning">학생 실명·학번·사진 등 개인정보가 포함된 PDF는 올리지 마세요. 게시한 사례와 댓글은 모둠원(전체 공개 모드에서는 참가자 전체)에게 보입니다.</div>
- <p class="hint">이 웹앱은 원래의 AIEDAP 공식 공유마당과 별도로 운영되는 연수 내 실습 공간입니다.</p>
+ <div class="warning">학생 실명·학번·사진 등 개인정보가 포함된 PDF는 올리지 마세요. 게시한 사례와 댓글은 동일 모둠에 등록한 연수생과 운영자에게 보입니다.</div>
+ <p class="hint">운영자이신가요? <a class="simple-link" href="/admin.html">운영자 전용 로그인</a></p><p class="hint">이 웹앱은 AIEDAP 공식 공유마당과 별도로 운영되는 연수 내 실습 공간입니다.</p>
  </div></article></section>
 <div id="workspace" hidden>
 <header class="site-header"><div class="brand"><strong>AI·융합수업 실천 사례 공유회</strong><small>AIEDAP · MODULE 01</small></div><div class="head-info"><span id="identity"></span><span class="autosave" id="save-state">자동 저장</span><button type="button" id="logout" class="outline-light">계정 변경</button></div></header>
@@ -28,11 +26,11 @@
 <section id="activity-panel" class="activity-panel" hidden><div class="activity-head"><span>✍️ 슬라이드 연계 활동</span><span class="pill">자동저장</span></div><div id="activity-content"></div></section>
 </main><footer class="pager"><button type="button" id="slide-prev">← 이전</button><strong id="pager-count">1 / 19</strong><button class="primary" type="button" id="slide-next">다음 →</button></footer></div>
 <div id="screen-gallery" class="page"><main class="full-main"><div class="section-intro"><div><p class="eyebrow">GALLERY WALK</p><h1>모둠별 수업 사례 갤러리워크</h1><p>모둠 내 다른 선생님의 3쪽 PDF 사례를 살펴보고, 세 관점으로 동료 피드백을 남깁니다.</p></div><button class="secondary" id="gallery-refresh">↻ 게시물 새로고침</button></div>
-<div id="gallery-status" class="soft-message"></div><div class="gallery-layout"><div><article id="upload-card" class="white-card"><h2>내 수업 사례 공유</h2><div id="upload-body"></div></article><article class="white-card"><h2>갤러리 사례 목록</h2><div id="post-list"></div></article></div><section class="white-card" id="post-detail"><div class="empty">왼쪽에서 사례를 선택하면 PDF와 댓글이 표시됩니다.</div></section></div></main></div>
+<div id="gallery-status" class="soft-message"></div><div id="gallery-group-filter" class="admin-group-filter" hidden></div><div class="gallery-layout"><div><article id="upload-card" class="white-card"><h2>내 수업 사례 공유</h2><div id="upload-body"></div></article><article class="white-card"><h2>갤러리 사례 목록</h2><div id="post-list"></div></article></div><section class="white-card" id="post-detail"><div class="empty">왼쪽에서 사례를 선택하면 PDF와 댓글이 표시됩니다.</div></section></div></main></div>
 <div id="screen-result" class="page"><main class="full-main"><p class="eyebrow">RESULT</p><h1>결과물 문서 저장</h1><p>활동 기록, 내 수업 사례, 동료 피드백, 성찰 수정 내용을 하나의 문서로 정리합니다.</p><div id="result-status" class="soft-message"></div><div class="actions"><button class="primary" id="export-docx">📄 Word 문서(.docx)</button><button class="secondary" id="export-hwpx">💾 한글 문서(.hwpx)</button><button class="secondary" id="export-json">🗃️ JSON 백업 저장</button><label class="secondary upload-label">📥 JSON 백업 불러오기<input type="file" id="import-json" accept=".json,application/json" hidden/></label><button class="secondary" id="export-preview">◉ 내용 미리보기</button></div><div id="preview-content" hidden></div><div id="result-summary"></div></main></div>
-<div id="screen-admin" class="page"><main class="full-main"><p class="eyebrow">ADMIN</p><h1>60명 갤러리워크 운영 설정</h1><p>모둠 인원 4~10명, 전체 보기/모둠별 보기, 참가 현황, 교안 PDF 등록을 관리합니다.</p>
-<div class="admin-grid"><article class="white-card"><h2>모둠 운영</h2><form id="group-form" class="form-stack"><label>갤러리워크 공개 범위<select id="admin-mode"><option value="groups">같은 모둠만 보기·댓글</option><option value="all">전체 60명 보기·댓글</option></select></label><label>모둠 개수 (6~15)<input type="number" id="group-count" min="6" max="15" value="10" required/></label><label>모둠별 최대 인원 (4~10)<input type="number" id="group-capacity" min="4" max="10" value="6" required/></label><p class="hint">총 수용 인원은 60명 이상이어야 합니다. 기존 참여자가 있는 모둠은 삭제하거나 정원 미만으로 축소할 수 없습니다.</p><button type="submit" class="primary">모둠 설정 저장</button></form></article>
+<div id="screen-admin" class="page"><main class="full-main"><p class="eyebrow">ADMIN</p><h1>60명 갤러리워크 운영 설정</h1><p>모둠 인원 4~10명, 모둠별 갤러리 열람, 참가자 편성 및 교안 PDF 등록을 관리합니다.</p>
+<div class="admin-grid"><article class="white-card"><h2>모둠 운영</h2><form id="group-form" class="form-stack"><label class="admin-toggle"><input type="checkbox" id="registration-open" style="width:20px;min-height:20px"> 연수생 신규 입장 허용</label><p class="hint">수업 시작 전에 체크하고 저장하면 연수생이 모둠을 선택해 입장합니다. 연수 중 마감할 수도 있습니다.</p><label>모둠 개수 (6~15)<input type="number" id="group-count" min="6" max="15" value="10" required/></label><label>모둠별 최대 인원 (4~10)<input type="number" id="group-capacity" min="4" max="10" value="6" required/></label><p class="hint">총 수용 인원은 60명 이상이어야 합니다. 기존 참여자가 있는 모둠은 삭제하거나 정원 미만으로 축소할 수 없습니다.</p><button type="submit" class="primary">모둠 설정 저장</button></form></article>
 <article class="white-card"><h2>원본 19장 교안 등록</h2><p class="hint">GitHub 배포본에 원본 PDF 파일이 없을 때만 한 번 등록하세요. 19쪽으로 변환된 원본 교안 PDF를 업로드하면 연수생 전체에게 표시됩니다.</p><input type="file" id="deck-file" accept="application/pdf,.pdf"/><button id="deck-submit" class="primary">교안 PDF 서버 등록</button><p id="deck-state"></p></article></div>
-<article class="white-card"><h2>참가자·업로드·피드백 현황</h2><div class="actions"><button id="admin-refresh" class="secondary">↻ 현황 새로고침</button><button id="admin-csv" class="secondary">📊 현황 CSV 저장</button></div><div id="admin-users"></div></article>
+<article class="white-card"><h2>모둠별 갤러리 현황</h2><div id="admin-groups" class="group-cards"></div></article><article class="white-card"><h2>참가자·업로드·피드백 현황</h2><div class="actions"><button id="admin-refresh" class="secondary">↻ 현황 새로고침</button><button id="admin-csv" class="secondary">📊 현황 CSV 저장</button></div><div id="admin-users"></div></article>
 </main></div></div>
 <script type="module" src="/src/main.js"></script></body></html>
