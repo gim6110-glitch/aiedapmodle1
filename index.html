@@ -29,8 +29,18 @@
 <div id="gallery-status" class="soft-message"></div><div id="gallery-group-filter" class="admin-group-filter" hidden></div><div class="gallery-layout"><div><article id="upload-card" class="white-card"><h2>내 수업 사례 공유</h2><div id="upload-body"></div></article><article class="white-card"><h2>갤러리 사례 목록</h2><div id="post-list"></div></article></div><section class="white-card" id="post-detail"><div class="empty">왼쪽에서 사례를 선택하면 PDF와 댓글이 표시됩니다.</div></section></div></main></div>
 <div id="screen-result" class="page"><main class="full-main"><p class="eyebrow">RESULT</p><h1>결과물 문서 저장</h1><p>활동 기록, 내 수업 사례, 동료 피드백, 성찰 수정 내용을 하나의 문서로 정리합니다.</p><div id="result-status" class="soft-message"></div><div class="actions"><button class="primary" id="export-docx">📄 Word 문서(.docx)</button><button class="secondary" id="export-hwpx">💾 한글 문서(.hwpx)</button><button class="secondary" id="export-json">🗃️ JSON 백업 저장</button><label class="secondary upload-label">📥 JSON 백업 불러오기<input type="file" id="import-json" accept=".json,application/json" hidden/></label><button class="secondary" id="export-preview">◉ 내용 미리보기</button></div><div id="preview-content" hidden></div><div id="result-summary"></div></main></div>
 <div id="screen-admin" class="page"><main class="full-main"><p class="eyebrow">ADMIN</p><h1>60명 갤러리워크 운영 설정</h1><p>모둠 인원 4~10명, 모둠별 갤러리 열람, 참가자 편성 및 교안 PDF 등록을 관리합니다.</p>
+<article class="white-card" id="admin-password-card"><h2>🔐 관리자 비밀번호 변경</h2>
+<p class="hint" id="admin-password-notice">관리자 비밀번호는 이 화면에서 언제든 변경할 수 있습니다.</p>
+<form id="admin-password-form" class="form-stack" autocomplete="off">
+<label>현재 비밀번호<input id="admin-current-password" type="password" autocomplete="current-password" required placeholder="처음에는 9876을 입력하세요" /></label>
+<label>새 비밀번호 (8자 이상)<input id="admin-new-password" type="password" autocomplete="new-password" minlength="8" maxlength="100" required placeholder="새 관리자 비밀번호" /></label>
+<label>새 비밀번호 확인<input id="admin-confirm-password" type="password" autocomplete="new-password" minlength="8" maxlength="100" required placeholder="새 비밀번호 다시 입력" /></label>
+<button type="submit" class="primary">비밀번호 변경 및 저장</button>
+</form>
+</article>
+<div id="admin-operations">
 <div class="admin-grid"><article class="white-card"><h2>모둠 운영</h2><form id="group-form" class="form-stack"><label class="admin-toggle"><input type="checkbox" id="registration-open" style="width:20px;min-height:20px"> 연수생 신규 입장 허용</label><p class="hint">수업 시작 전에 체크하고 저장하면 연수생이 모둠을 선택해 입장합니다. 연수 중 마감할 수도 있습니다.</p><label>모둠 개수 (6~15)<input type="number" id="group-count" min="6" max="15" value="10" required/></label><label>모둠별 최대 인원 (4~10)<input type="number" id="group-capacity" min="4" max="10" value="6" required/></label><p class="hint">총 수용 인원은 60명 이상이어야 합니다. 기존 참여자가 있는 모둠은 삭제하거나 정원 미만으로 축소할 수 없습니다.</p><button type="submit" class="primary">모둠 설정 저장</button></form></article>
 <article class="white-card"><h2>원본 19장 교안 등록</h2><p class="hint">GitHub 배포본에 원본 PDF 파일이 없을 때만 한 번 등록하세요. 19쪽으로 변환된 원본 교안 PDF를 업로드하면 연수생 전체에게 표시됩니다.</p><input type="file" id="deck-file" accept="application/pdf,.pdf"/><button id="deck-submit" class="primary">교안 PDF 서버 등록</button><p id="deck-state"></p></article></div>
 <article class="white-card"><h2>모둠별 갤러리 현황</h2><div id="admin-groups" class="group-cards"></div></article><article class="white-card"><h2>참가자·업로드·피드백 현황</h2><div class="actions"><button id="admin-refresh" class="secondary">↻ 현황 새로고침</button><button id="admin-csv" class="secondary">📊 현황 CSV 저장</button></div><div id="admin-users"></div></article>
-</main></div></div>
+</div></main></div></div>
 <script type="module" src="/src/main.js"></script></body></html>
