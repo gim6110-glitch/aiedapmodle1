@@ -20,3 +20,11 @@ jobs:
           node --check src/hwpx.js
       - name: Production build
         run: npm run build
+      - name: Assert published entrypoints exist
+        run: |
+          test -s dist/index.html
+          test -s dist/admin.html
+          test -d dist/assets
+          test -s dist/slides.json
+          test -s dist/slides-images.json
+          echo "Main and admin entrypoints and slides ready."
