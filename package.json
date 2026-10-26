@@ -1,0 +1,23 @@
+{
+  "name": "aiedap-module1-gallery",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^9.1.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.4.296",
+    "docx": "^9.5.1",
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "vite": "^7.1.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
